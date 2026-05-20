@@ -5,7 +5,7 @@ from aiogram.types import Message
 
 from config import TZ
 from keyboards import main_kb
-from utils import money, tx_sign
+from utils import money, tx_sign, parse_amount
 from parser import parse_category_line
 from services.users import get_internal_user_id, has_access
 from services.family import (
@@ -20,6 +20,7 @@ from services.family import (
 )
 from services.stats import get_family_stats, format_stats
 from services.history import get_family_history
+from services.settings import set_family_piggy_start_balance
 
 router = Router()
 
@@ -69,6 +70,34 @@ async def family_stats_handler(message: Message):
         return
     stats = await get_family_stats(family[0])
     await message.answer(format_stats(stats, "Семейный бюджет"), reply_markup=main_kb)
+
+
+@router.message(Command("family_piggy"))
+async def family_piggy_handler(message: Message):
+    user_id = await get_internal_user_id(message.from_user.id)
+    if not await has_access(user_id):
+        await message.answer("⛔ Семейный бюджет доступен после оплаты или во время trial.")
+        return
+
+    family = await get_user_family(user_id)
+    if not family:
+        await message.answer("У вас пока нет семейного бюджета. Создать: /family_create")
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2:
+        value = parse_amount(parts[1].strip())
+        if value is None:
+            await message.answer("Формат: /family_piggy 20000")
+            return
+        await set_family_piggy_start_balance(family[0], float(value))
+
+    stats = await get_family_stats(family[0])
+    await message.answer(
+        f"Семейная копилка сейчас: {money(stats.get('piggy_balance'))} (старт {money(stats.get('piggy_start_balance'))})\n"
+        f"Команда: /family_piggy 20000 — задать стартовую сумму.",
+        reply_markup=main_kb,
+    )
 
 
 @router.message(Command("family_history"))

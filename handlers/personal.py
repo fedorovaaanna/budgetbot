@@ -5,11 +5,12 @@ from aiogram.types import Message
 
 from config import TZ
 from keyboards import main_kb
-from utils import money, tx_sign
+from utils import money, tx_sign, parse_amount
 from parser import parse_category_line
 from services.users import get_internal_user_id, has_access
 from services.stats import get_personal_stats, format_stats
 from services.history import get_personal_history
+from services.settings import set_user_piggy_start_balance
 from services.categories import (
     add_category,
     get_categories,
@@ -30,6 +31,29 @@ async def stats_handler(message: Message):
         return
     stats = await get_personal_stats(user_id)
     await message.answer(format_stats(stats, "Личный бюджет"), reply_markup=main_kb)
+
+
+@router.message(Command("piggy"))
+async def piggy_handler(message: Message):
+    user_id = await get_internal_user_id(message.from_user.id)
+    if not await has_access(user_id):
+        await message.answer("⛔ Тестовый доступ закончился. Используйте /pay.")
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2:
+        value = parse_amount(parts[1].strip())
+        if value is None:
+            await message.answer("Формат: /piggy 10000")
+            return
+        await set_user_piggy_start_balance(user_id, float(value))
+
+    stats = await get_personal_stats(user_id)
+    await message.answer(
+        f"Копилка сейчас: {money(stats.get('piggy_balance'))} (старт {money(stats.get('piggy_start_balance'))})\n"
+        f"Команда: /piggy 10000 — задать стартовую сумму.",
+        reply_markup=main_kb,
+    )
 
 
 @router.message(Command("history"))

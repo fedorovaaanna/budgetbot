@@ -31,6 +31,11 @@ async def init_db():
         )
         """)
 
+        cur = await db.execute("PRAGMA table_info(user_settings)")
+        user_settings_cols = {row[1] for row in await cur.fetchall()}
+        if "piggy_bank_start_balance" not in user_settings_cols:
+            await db.execute("ALTER TABLE user_settings ADD COLUMN piggy_bank_start_balance REAL DEFAULT 0")
+
         await db.execute("""
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +89,13 @@ async def init_db():
             invite_code TEXT UNIQUE NOT NULL,
             is_active INTEGER DEFAULT 1,
             created_at TEXT NOT NULL
+        )
+        """)
+
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS family_settings (
+            family_id INTEGER PRIMARY KEY,
+            piggy_bank_start_balance REAL DEFAULT 0
         )
         """)
 

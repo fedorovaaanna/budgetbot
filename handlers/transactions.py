@@ -38,9 +38,10 @@ async def any_message_handler(message: Message):
         category, cleaned_comment = await save_personal_transaction(user_id, parsed)
         operation_scope = "Личный бюджет"
 
-    operation = "Доход" if parsed["type"] == "income" else "Расход"
     if parsed["is_extra"]:
-        operation = "Вне бюджета: " + operation
+        operation = "Копилка: пополнение" if parsed["type"] == "income" else "Копилка: расход"
+    else:
+        operation = "Доход" if parsed["type"] == "income" else "Расход"
 
     comment_text = f"\nКомментарий: {cleaned_comment}" if cleaned_comment else ""
 

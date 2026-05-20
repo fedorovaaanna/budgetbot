@@ -15,7 +15,7 @@ async def export_excel(user_id: int):
 
     ws = wb.active
     ws.title = "Personal operations"
-    ws.append(["Дата", "Тип", "Вне бюджета", "Сумма", "Категория", "Комментарий"])
+    ws.append(["Дата", "Тип", "Копилка", "Сумма", "Категория", "Комментарий"])
 
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("""
@@ -39,7 +39,7 @@ async def export_excel(user_id: int):
         ws.append([created_at, "доход" if type_ == "income" else "расход", "да" if is_extra else "нет", amount, category, comment])
 
     ws2 = wb.create_sheet("Personal summaries")
-    ws2.append(["Месяц", "Доходы", "Расходы", "Внебюджетные доходы", "Внебюджетные расходы", "Итог", "Категории JSON"])
+    ws2.append(["Месяц", "Доходы", "Расходы", "Копилка: пополнения", "Копилка: траты", "Итог", "Категории JSON"])
     for year, month, income, expense, extra_income, extra_expense, balance, category_json in personal_summaries:
         ws2.append([month_key(year, month), income, expense, extra_income, extra_expense, balance, category_json])
 
@@ -47,7 +47,7 @@ async def export_excel(user_id: int):
     if family:
         family_id = family[0]
         ws3 = wb.create_sheet("Family operations")
-        ws3.append(["Дата", "Участник", "Тип", "Вне бюджета", "Сумма", "Категория", "Комментарий"])
+        ws3.append(["Дата", "Участник", "Тип", "Копилка", "Сумма", "Категория", "Комментарий"])
         async with aiosqlite.connect(DB_PATH) as db:
             cur = await db.execute("""
             SELECT created_at, created_by_member_number, type, is_extra, amount, category_name_snapshot, comment
@@ -70,7 +70,7 @@ async def export_excel(user_id: int):
             ws3.append([created_at, f"участник #{member_number}", "доход" if type_ == "income" else "расход", "да" if is_extra else "нет", amount, category, comment])
 
         ws4 = wb.create_sheet("Family summaries")
-        ws4.append(["Месяц", "Доходы", "Расходы", "Внебюджетные доходы", "Внебюджетные расходы", "Итог", "Категории JSON"])
+        ws4.append(["Месяц", "Доходы", "Расходы", "Копилка: пополнения", "Копилка: траты", "Итог", "Категории JSON"])
         for year, month, income, expense, extra_income, extra_expense, balance, category_json in family_summaries:
             ws4.append([month_key(year, month), income, expense, extra_income, extra_expense, balance, category_json])
 
