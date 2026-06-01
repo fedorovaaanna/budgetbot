@@ -5,9 +5,68 @@ from utils import current_year_month, days_left_in_month, month_key, money
 from services.settings import get_user_piggy_start_balance, get_family_piggy_start_balance
 
 
+def _month_lt_sql():
+    return "(year < ? OR (year = ? AND month < ?))"
+
+
+async def get_personal_budget_carryover(user_id: int, year: int, month: int) -> float:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(f"""
+        SELECT COALESCE(SUM(income_total - expense_total), 0)
+        FROM monthly_summaries
+        WHERE user_id = ? AND {_month_lt_sql()}
+        """, (user_id, year, year, month))
+        summarized = (await cur.fetchone())[0] or 0
+
+        cur = await db.execute(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0)
+        FROM transactions t
+        WHERE t.user_id = ?
+          AND t.is_extra = 0
+          AND {_month_lt_sql()}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM monthly_summaries ms
+            WHERE ms.user_id = t.user_id AND ms.year = t.year AND ms.month = t.month
+          )
+        """, (user_id, year, year, month))
+        raw = (await cur.fetchone())[0] or 0
+
+    return float(summarized) + float(raw)
+
+
+async def get_family_budget_carryover(family_id: int, year: int, month: int) -> float:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(f"""
+        SELECT COALESCE(SUM(income_total - expense_total), 0)
+        FROM family_monthly_summaries
+        WHERE family_id = ? AND {_month_lt_sql()}
+        """, (family_id, year, year, month))
+        summarized = (await cur.fetchone())[0] or 0
+
+        cur = await db.execute(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0)
+        FROM family_transactions t
+        WHERE t.family_id = ?
+          AND t.is_extra = 0
+          AND {_month_lt_sql()}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM family_monthly_summaries ms
+            WHERE ms.family_id = t.family_id AND ms.year = t.year AND ms.month = t.month
+          )
+        """, (family_id, year, year, month))
+        raw = (await cur.fetchone())[0] or 0
+
+    return float(summarized) + float(raw)
+
+
 async def get_personal_stats(user_id: int):
     year, month = current_year_month()
     piggy_start = await get_user_piggy_start_balance(user_id)
+    budget_carryover = await get_personal_budget_carryover(user_id, year, month)
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("""
         SELECT type, is_extra, category_name_snapshot, SUM(amount)
@@ -46,6 +105,7 @@ async def get_personal_stats(user_id: int):
         old_rows = await cur.fetchall()
 
     stats = build_stats_dict(year, month, rows, old_rows)
+    stats["budget_carryover"] = budget_carryover
     piggy_total_income = (extra_income_tx or 0) + (extra_income_old or 0)
     piggy_total_expense = (extra_expense_tx or 0) + (extra_expense_old or 0)
     stats["piggy_start_balance"] = piggy_start
@@ -56,6 +116,7 @@ async def get_personal_stats(user_id: int):
 async def get_family_stats(family_id: int):
     year, month = current_year_month()
     piggy_start = await get_family_piggy_start_balance(family_id)
+    budget_carryover = await get_family_budget_carryover(family_id, year, month)
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("""
         SELECT type, is_extra, category_name_snapshot, SUM(amount)
@@ -94,6 +155,7 @@ async def get_family_stats(family_id: int):
         old_rows = await cur.fetchall()
 
     stats = build_stats_dict(year, month, rows, old_rows)
+    stats["budget_carryover"] = budget_carryover
     piggy_total_income = (extra_income_tx or 0) + (extra_income_old or 0)
     piggy_total_expense = (extra_expense_tx or 0) + (extra_expense_old or 0)
     stats["piggy_start_balance"] = piggy_start
@@ -136,7 +198,7 @@ def build_stats_dict(year: int, month: int, rows, old_rows):
 
 
 def stats_balance(stats: dict):
-    return stats["income"] - stats["expense"]
+    return (stats.get("budget_carryover") or 0) + stats["income"] - stats["expense"]
 
 
 def daily_budget(stats: dict):
@@ -151,6 +213,7 @@ def format_stats(stats: dict, title_prefix: str = "Личный бюджет"):
 
     text = (
         f"📊 {title_prefix}: {title}\n\n"
+        f"Перенос с прошлого месяца (бюджет): {money(stats.get('budget_carryover'))}\n"
         f"Доходы в рамках бюджета: {money(stats['income'])}\n"
         f"Расходы в рамках бюджета: {money(stats['expense'])}\n"
         f"Копилка за месяц: +{money(stats['extra_income'])} / -{money(stats['extra_expense'])}\n"
