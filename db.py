@@ -35,6 +35,8 @@ async def init_db():
         user_settings_cols = {row[1] for row in await cur.fetchall()}
         if "piggy_bank_start_balance" not in user_settings_cols:
             await db.execute("ALTER TABLE user_settings ADD COLUMN piggy_bank_start_balance REAL DEFAULT 0")
+        if "budget_reset_at" not in user_settings_cols:
+            await db.execute("ALTER TABLE user_settings ADD COLUMN budget_reset_at TEXT")
 
         await db.execute("""
         CREATE TABLE IF NOT EXISTS categories (
@@ -98,6 +100,11 @@ async def init_db():
             piggy_bank_start_balance REAL DEFAULT 0
         )
         """)
+
+        cur = await db.execute("PRAGMA table_info(family_settings)")
+        family_settings_cols = {row[1] for row in await cur.fetchall()}
+        if "budget_reset_at" not in family_settings_cols:
+            await db.execute("ALTER TABLE family_settings ADD COLUMN budget_reset_at TEXT")
 
         await db.execute("""
         CREATE TABLE IF NOT EXISTS family_members (

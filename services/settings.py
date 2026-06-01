@@ -1,5 +1,6 @@
 import aiosqlite
 from config import DB_PATH
+from utils import now_local
 
 
 async def get_user_settings(user_id: int):
@@ -78,3 +79,47 @@ async def set_family_piggy_start_balance(family_id: int, value: float):
             (value, family_id),
         )
         await db.commit()
+
+
+async def get_user_budget_reset_at(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        await db.commit()
+        cur = await db.execute("""
+        SELECT budget_reset_at
+        FROM user_settings
+        WHERE user_id = ?
+        """, (user_id,))
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+async def reset_user_budget_now(user_id: int):
+    reset_at = now_local().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        await db.execute("UPDATE user_settings SET budget_reset_at = ? WHERE user_id = ?", (reset_at, user_id))
+        await db.commit()
+    return reset_at
+
+
+async def get_family_budget_reset_at(family_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO family_settings (family_id) VALUES (?)", (family_id,))
+        await db.commit()
+        cur = await db.execute("""
+        SELECT budget_reset_at
+        FROM family_settings
+        WHERE family_id = ?
+        """, (family_id,))
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+async def reset_family_budget_now(family_id: int):
+    reset_at = now_local().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO family_settings (family_id) VALUES (?)", (family_id,))
+        await db.execute("UPDATE family_settings SET budget_reset_at = ? WHERE family_id = ?", (reset_at, family_id))
+        await db.commit()
+    return reset_at

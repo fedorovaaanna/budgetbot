@@ -2,7 +2,12 @@ from datetime import datetime
 import aiosqlite
 from config import DB_PATH, TZ
 from utils import current_year_month, days_left_in_month, month_key, money
-from services.settings import get_user_piggy_start_balance, get_family_piggy_start_balance
+from services.settings import (
+    get_user_piggy_start_balance,
+    get_family_piggy_start_balance,
+    get_user_budget_reset_at,
+    get_family_budget_reset_at,
+)
 
 
 def _month_lt_sql():
@@ -10,12 +15,19 @@ def _month_lt_sql():
 
 
 async def get_personal_budget_carryover(user_id: int, year: int, month: int) -> float:
+    reset_at = await get_user_budget_reset_at(user_id)
+    reset_year, reset_month = 0, 0
+    if reset_at:
+        dt = datetime.fromisoformat(reset_at).astimezone(TZ)
+        reset_year, reset_month = dt.year, dt.month
+
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(f"""
         SELECT COALESCE(SUM(income_total - expense_total), 0)
         FROM monthly_summaries
         WHERE user_id = ? AND {_month_lt_sql()}
-        """, (user_id, year, year, month))
+          AND (year > ? OR (year = ? AND month > ?))
+        """, (user_id, year, year, month, reset_year, reset_year, reset_month))
         summarized = (await cur.fetchone())[0] or 0
 
         cur = await db.execute(f"""
@@ -25,24 +37,33 @@ async def get_personal_budget_carryover(user_id: int, year: int, month: int) -> 
         WHERE t.user_id = ?
           AND t.is_extra = 0
           AND {_month_lt_sql()}
+          AND (t.year > ? OR (t.year = ? AND t.month > ?))
+          AND (? IS NULL OR t.created_at >= ?)
           AND NOT EXISTS (
             SELECT 1
             FROM monthly_summaries ms
             WHERE ms.user_id = t.user_id AND ms.year = t.year AND ms.month = t.month
           )
-        """, (user_id, year, year, month))
+        """, (user_id, year, year, month, reset_year, reset_year, reset_month, reset_at, reset_at))
         raw = (await cur.fetchone())[0] or 0
 
     return float(summarized) + float(raw)
 
 
 async def get_family_budget_carryover(family_id: int, year: int, month: int) -> float:
+    reset_at = await get_family_budget_reset_at(family_id)
+    reset_year, reset_month = 0, 0
+    if reset_at:
+        dt = datetime.fromisoformat(reset_at).astimezone(TZ)
+        reset_year, reset_month = dt.year, dt.month
+
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(f"""
         SELECT COALESCE(SUM(income_total - expense_total), 0)
         FROM family_monthly_summaries
         WHERE family_id = ? AND {_month_lt_sql()}
-        """, (family_id, year, year, month))
+          AND (year > ? OR (year = ? AND month > ?))
+        """, (family_id, year, year, month, reset_year, reset_year, reset_month))
         summarized = (await cur.fetchone())[0] or 0
 
         cur = await db.execute(f"""
@@ -52,12 +73,14 @@ async def get_family_budget_carryover(family_id: int, year: int, month: int) -> 
         WHERE t.family_id = ?
           AND t.is_extra = 0
           AND {_month_lt_sql()}
+          AND (t.year > ? OR (t.year = ? AND t.month > ?))
+          AND (? IS NULL OR t.created_at >= ?)
           AND NOT EXISTS (
             SELECT 1
             FROM family_monthly_summaries ms
             WHERE ms.family_id = t.family_id AND ms.year = t.year AND ms.month = t.month
           )
-        """, (family_id, year, year, month))
+        """, (family_id, year, year, month, reset_year, reset_year, reset_month, reset_at, reset_at))
         raw = (await cur.fetchone())[0] or 0
 
     return float(summarized) + float(raw)
@@ -66,14 +89,15 @@ async def get_family_budget_carryover(family_id: int, year: int, month: int) -> 
 async def get_personal_stats(user_id: int):
     year, month = current_year_month()
     piggy_start = await get_user_piggy_start_balance(user_id)
+    reset_at = await get_user_budget_reset_at(user_id)
     budget_carryover = await get_personal_budget_carryover(user_id, year, month)
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("""
         SELECT type, is_extra, category_name_snapshot, SUM(amount)
         FROM transactions
-        WHERE user_id = ? AND year = ? AND month = ?
+        WHERE user_id = ? AND year = ? AND month = ? AND (? IS NULL OR created_at >= ?)
         GROUP BY type, is_extra, category_name_snapshot
-        """, (user_id, year, month))
+        """, (user_id, year, month, reset_at, reset_at))
         rows = await cur.fetchall()
 
         cur = await db.execute("""
@@ -116,14 +140,15 @@ async def get_personal_stats(user_id: int):
 async def get_family_stats(family_id: int):
     year, month = current_year_month()
     piggy_start = await get_family_piggy_start_balance(family_id)
+    reset_at = await get_family_budget_reset_at(family_id)
     budget_carryover = await get_family_budget_carryover(family_id, year, month)
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("""
         SELECT type, is_extra, category_name_snapshot, SUM(amount)
         FROM family_transactions
-        WHERE family_id = ? AND year = ? AND month = ?
+        WHERE family_id = ? AND year = ? AND month = ? AND (? IS NULL OR created_at >= ?)
         GROUP BY type, is_extra, category_name_snapshot
-        """, (family_id, year, month))
+        """, (family_id, year, month, reset_at, reset_at))
         rows = await cur.fetchall()
 
         cur = await db.execute("""

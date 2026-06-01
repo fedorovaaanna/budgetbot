@@ -20,7 +20,8 @@ from services.family import (
 )
 from services.stats import get_family_stats, format_stats
 from services.history import get_family_history
-from services.settings import set_family_piggy_start_balance
+from services.settings import set_family_piggy_start_balance, reset_family_budget_now
+from services.stats import stats_balance
 
 router = Router()
 
@@ -96,6 +97,28 @@ async def family_piggy_handler(message: Message):
     await message.answer(
         f"Семейная копилка сейчас: {money(stats.get('piggy_balance'))} (старт {money(stats.get('piggy_start_balance'))})\n"
         f"Команда: /family_piggy 20000 — задать стартовую сумму.",
+        reply_markup=main_kb,
+    )
+
+
+@router.message(Command("family_reset_budget"))
+async def family_reset_budget_handler(message: Message):
+    user_id = await get_internal_user_id(message.from_user.id)
+    if not await has_access(user_id):
+        await message.answer("⛔ Семейный бюджет доступен после оплаты или во время trial.")
+        return
+
+    family = await get_user_family(user_id)
+    if not family:
+        await message.answer("У вас пока нет семейного бюджета. Создать: /family_create")
+        return
+
+    reset_at = await reset_family_budget_now(family[0])
+    stats = await get_family_stats(family[0])
+    await message.answer(
+        f"Семейный бюджет обнулен с {reset_at}.\n"
+        f"Доступно сейчас (бюджет): {money(stats_balance(stats))}\n"
+        f"Семейная копилка сейчас: {money(stats.get('piggy_balance'))}",
         reply_markup=main_kb,
     )
 

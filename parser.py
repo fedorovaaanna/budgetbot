@@ -41,8 +41,21 @@ def split_family_prefix(text: str):
     return False, text
 
 
+def split_piggy_prefix(text: str):
+    text = text.strip()
+    lowered = text.lower()
+
+    prefixes = ["p ", "piggy ", "копилка "]
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            return True, text[len(prefix):].strip()
+
+    return False, text
+
+
 def parse_transaction(text: str):
     is_family, text = split_family_prefix(text)
+    is_piggy, text = split_piggy_prefix(text)
     text = normalize_signs(text)
 
     pattern = r"^(\+\+|\+|--|-)\s*(\d+(?:[.,]\d+)?)\s*(.*)$"
@@ -58,7 +71,7 @@ def parse_transaction(text: str):
         return None
 
     type_ = "income" if sign in ["+", "++"] else "expense"
-    is_extra = 1 if sign in ["++", "--"] else 0
+    is_extra = 1 if is_piggy or sign in ["++", "--"] else 0
 
     return {
         "scope": "family" if is_family else "personal",

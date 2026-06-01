@@ -8,9 +8,9 @@ from keyboards import main_kb
 from utils import money, tx_sign, parse_amount
 from parser import parse_category_line
 from services.users import get_internal_user_id, has_access
-from services.stats import get_personal_stats, format_stats
+from services.stats import get_personal_stats, format_stats, stats_balance
 from services.history import get_personal_history
-from services.settings import set_user_piggy_start_balance
+from services.settings import set_user_piggy_start_balance, reset_user_budget_now
 from services.categories import (
     add_category,
     get_categories,
@@ -52,6 +52,23 @@ async def piggy_handler(message: Message):
     await message.answer(
         f"Копилка сейчас: {money(stats.get('piggy_balance'))} (старт {money(stats.get('piggy_start_balance'))})\n"
         f"Команда: /piggy 10000 — задать стартовую сумму.",
+        reply_markup=main_kb,
+    )
+
+
+@router.message(Command("reset_budget"))
+async def reset_budget_handler(message: Message):
+    user_id = await get_internal_user_id(message.from_user.id)
+    if not await has_access(user_id):
+        await message.answer("⛔ Тестовый доступ закончился. Используйте /pay.")
+        return
+
+    reset_at = await reset_user_budget_now(user_id)
+    stats = await get_personal_stats(user_id)
+    await message.answer(
+        f"Бюджет обнулен с {reset_at}.\n"
+        f"Доступно сейчас (бюджет): {money(stats_balance(stats))}\n"
+        f"Копилка сейчас: {money(stats.get('piggy_balance'))}",
         reply_markup=main_kb,
     )
 
