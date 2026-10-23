@@ -226,8 +226,13 @@ def stats_balance(stats: dict):
     return (stats.get("budget_carryover") or 0) + stats["income"] - stats["expense"]
 
 
+def budget_per_day(balance: float, days: int) -> float:
+    # Уход в минус не превращается в отрицательный дневной бюджет
+    return max(balance, 0) / max(days, 1)
+
+
 def daily_budget(stats: dict):
-    return stats_balance(stats) / days_left_in_month()
+    return budget_per_day(stats_balance(stats), days_left_in_month())
 
 
 def format_stats(stats: dict, title_prefix: str = "Личный бюджет"):
