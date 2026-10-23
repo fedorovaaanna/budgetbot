@@ -4,7 +4,7 @@ from utils import today_str, now_local, days_left_in_month, money
 from services.users import get_telegram_id_by_user_id, has_access
 from services.settings import get_user_settings
 from services.family import get_user_family
-from services.stats import get_personal_stats, get_family_stats, stats_balance, personal_spent_today, family_spent_today
+from services.stats import budget_per_day, get_personal_stats, get_family_stats, stats_balance, personal_spent_today, family_spent_today
 
 
 async def already_sent(recipient_user_id: int, scope: str, family_id, kind: str) -> bool:
@@ -33,7 +33,7 @@ async def mark_sent(recipient_user_id: int, scope: str, family_id, kind: str):
 async def get_or_create_daily_snapshot(scope: str, stats: dict, user_id=None, family_id=None):
     balance = stats_balance(stats)
     days_left = days_left_in_month()
-    day_budget = balance / days_left
+    day_budget = budget_per_day(balance, days_left)
     d = today_str()
 
     async with aiosqlite.connect(DB_PATH) as db:
@@ -77,7 +77,7 @@ def format_evening_message(title: str, snapshot: dict, spent_today: float, curre
     day_budget = snapshot["morning_daily_budget"]
     diff = day_budget - spent_today
     tomorrow_days = max(days_left_in_month() - 1, 1)
-    tomorrow_budget = current_balance / tomorrow_days
+    tomorrow_budget = budget_per_day(current_balance, tomorrow_days)
 
     if diff >= 0:
         result_line = f"Осталось от дневного бюджета: {money(diff)}"
