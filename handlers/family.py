@@ -150,7 +150,7 @@ async def family_categories_handler(message: Message):
     if not family:
         await message.answer("У вас пока нет семейного бюджета. Создать: /family_create")
         return
-    rows = await get_family_categories(family[0], active_only=False)
+    rows = await get_family_categories(family[0], active_only=True)
     if not rows:
         await message.answer(
             "Семейных категорий пока нет.\n\n"
@@ -160,11 +160,10 @@ async def family_categories_handler(message: Message):
         )
         return
     text = "👨‍👩‍👧 Семейные категории\n\n"
-    for cid, type_, name, aliases, is_active in rows:
-        status = "" if is_active else " удалена"
+    for cid, type_, name, aliases, _ in rows:
         type_title = "доход" if type_ == "income" else "расход"
         aliases_text = f" | {aliases}" if aliases else ""
-        text += f"#{cid} {type_title}: {name}{aliases_text}{status}\n"
+        text += f"#{cid} {type_title}: {name}{aliases_text}\n"
     text += (
         "\nКоманды:\n"
         "/family_add_category expense продукты | магазин, еда\n"

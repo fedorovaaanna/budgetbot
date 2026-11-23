@@ -99,18 +99,22 @@ async def history_handler(message: Message):
 @router.message(F.text == "⚙️ Категории")
 async def categories_handler(message: Message):
     user_id = await get_internal_user_id(message.from_user.id)
-    rows = await get_categories(user_id, active_only=False)
+    rows = await get_categories(user_id, active_only=True)
 
     if not rows:
-        await message.answer("Категорий пока нет.")
+        await message.answer(
+            "Категорий пока нет.\n\n"
+            "Добавить:\n"
+            "/add_category expense еда | кафе, продукты\n"
+            "/add_category income работа | клиент, зарплата"
+        )
         return
 
     text = "⚙️ Личные категории\n\n"
-    for cid, type_, name, aliases, is_active in rows:
-        status = "" if is_active else " удалена"
+    for cid, type_, name, aliases, _ in rows:
         type_title = "доход" if type_ == "income" else "расход"
         aliases_text = f" | {aliases}" if aliases else ""
-        text += f"#{cid} {type_title}: {name}{aliases_text}{status}\n"
+        text += f"#{cid} {type_title}: {name}{aliases_text}\n"
 
     text += (
         "\nКоманды:\n"
